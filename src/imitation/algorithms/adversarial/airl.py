@@ -1,5 +1,5 @@
 """Adversarial Inverse Reinforcement Learning (AIRL)."""
-from typing import Optional
+from typing import Mapping, Optional
 
 import torch as th
 from stable_baselines3.common import base_class, policies, vec_env
@@ -26,6 +26,7 @@ class AIRL(common.AdversarialTrainer):
         venv: vec_env.VecEnv,
         gen_algo: base_class.BaseAlgorithm,
         reward_net: reward_nets.RewardNet,
+        demo_data_loader_kwargs: Optional[Mapping] = None,
         **kwargs,
     ):
         """Builds an AIRL trainer.
@@ -43,6 +44,8 @@ class AIRL(common.AdversarialTrainer):
                 discriminator confusion. Environment and logger will be set to
                 `venv` and `custom_logger`.
             reward_net: Reward network; used as part of AIRL discriminator.
+            demo_data_loader_kwargs: Optional kwargs passed to
+                :func:`imitation.algorithms.base.make_data_loader`.
             **kwargs: Passed through to `AdversarialTrainer.__init__`.
 
         Raises:
@@ -56,6 +59,7 @@ class AIRL(common.AdversarialTrainer):
             venv=venv,
             gen_algo=gen_algo,
             reward_net=reward_net,
+            demo_data_loader_kwargs=demo_data_loader_kwargs,
             **kwargs,
         )
         # AIRL needs a policy from STOCHASTIC_POLICIES to compute discriminator output.
