@@ -118,6 +118,7 @@ class AdversarialTrainer(base.DemonstrationAlgorithm[types.Transitions]):
         gen_algo: base_class.BaseAlgorithm,
         reward_net: reward_nets.RewardNet,
         demo_minibatch_size: Optional[int] = None,
+        demo_data_loader_kwargs: Optional[Mapping] = None,
         n_disc_updates_per_round: int = 2,
         log_dir: types.AnyPath = "output/",
         disc_opt_cls: Type[th.optim.Optimizer] = th.optim.Adam,
@@ -154,6 +155,10 @@ class AdversarialTrainer(base.DemonstrationAlgorithm[types.Transitions]):
                 facilitating training with larger batch sizes, but is
                 generally slower. Must be a factor of `demo_batch_size`.
                 Optional, defaults to `demo_batch_size`.
+            demo_data_loader_kwargs: Optional kwargs passed to
+                :func:`imitation.algorithms.base.make_data_loader`. Use this to
+                set DataLoader options like ``num_workers`` for faster
+                demonstration loading.
             n_disc_updates_per_round: The number of discriminator updates after each
                 round of generator updates in AdversarialTrainer.learn().
             log_dir: Directory to store TensorBoard logs, plots, etc. in.
@@ -192,6 +197,7 @@ class AdversarialTrainer(base.DemonstrationAlgorithm[types.Transitions]):
         self.demo_minibatch_size = demo_minibatch_size or demo_batch_size
         if self.demo_batch_size % self.demo_minibatch_size != 0:
             raise ValueError("Batch size must be a multiple of minibatch size.")
+        self.demo_data_loader_kwargs = dict(demo_data_loader_kwargs or {})
         self._demo_data_loader = None
         self._endless_expert_iterator = None
         super().__init__(
@@ -307,6 +313,7 @@ class AdversarialTrainer(base.DemonstrationAlgorithm[types.Transitions]):
         self._demo_data_loader = base.make_data_loader(
             demonstrations,
             self.demo_batch_size,
+            data_loader_kwargs=self.demo_data_loader_kwargs,
         )
         self._endless_expert_iterator = util.endless_iter(self._demo_data_loader)
 
