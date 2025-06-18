@@ -102,6 +102,30 @@ Detailed example notebook: :doc:`../tutorials/4_train_airl`
 
     ...
 
+Using a Custom Reward Network
+=============================
+
+Any subclass of :class:`~imitation.rewards.reward_nets.RewardNet` can be used
+with :class:`~imitation.algorithms.adversarial.airl.AIRL`.  For example,
+the ``OptimizedRewardNet`` defined in :mod:`imitation.rewards.reward_nets`
+uses Tensor Core friendly layer sizes::
+
+    from imitation.rewards.reward_nets import OptimizedRewardNet
+
+    reward_net = OptimizedRewardNet(
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+    )
+    airl_trainer = AIRL(
+        demonstrations=rollouts,
+        demo_batch_size=2048,
+        gen_replay_buffer_capacity=512,
+        n_disc_updates_per_round=16,
+        venv=env,
+        gen_algo=learner,
+        reward_net=reward_net,
+    )
+
 API
 ===
 .. autoclass:: imitation.algorithms.adversarial.airl.AIRL

@@ -457,6 +457,79 @@ class BasicRewardNet(RewardNet):
         return outputs
 
 
+class OptimizedRewardNet(RewardNet):
+    """MLP reward network tuned for GPU efficiency."""
+
+    def __init__(
+        self,
+        observation_space: gym.Space,
+        action_space: gym.Space,
+        *,
+        use_state: bool = True,
+        use_action: bool = True,
+        use_next_state: bool = False,
+        use_done: bool = False,
+        hidden_sizes: Sequence[int] = (256, 256),
+        **kwargs: Any,
+    ) -> None:
+        """Build an optimized reward MLP.
+
+        Hidden layer sizes must be multiples of 8 to make best use of
+        Tensor Cores on modern NVIDIA GPUs.
+        """
+
+        super().__init__(observation_space, action_space)
+
+        for size in hidden_sizes:
+            if size % 8 != 0:
+                raise ValueError(f"hidden size {size} is not a multiple of 8")
+
+        self.use_state = use_state
+        self.use_action = use_action
+        self.use_next_state = use_next_state
+        self.use_done = use_done
+
+        combined_size = 0
+        if self.use_state:
+            combined_size += preprocessing.get_flattened_obs_dim(observation_space)
+        if self.use_action:
+            combined_size += preprocessing.get_flattened_obs_dim(action_space)
+        if self.use_next_state:
+            combined_size += preprocessing.get_flattened_obs_dim(observation_space)
+        if self.use_done:
+            combined_size += 1
+
+        build_kwargs: Dict[str, Any] = {
+            "in_size": combined_size,
+            "hid_sizes": hidden_sizes,
+            "out_size": 1,
+            "activation": nn.ReLU,
+            "squeeze_output": True,
+            **kwargs,
+        }
+
+        self.mlp = networks.build_mlp(**build_kwargs)
+
+    def forward(
+        self,
+        state: th.Tensor,
+        action: th.Tensor,
+        next_state: th.Tensor,
+        done: th.Tensor,
+    ) -> th.Tensor:
+        inputs = []
+        if self.use_state:
+            inputs.append(th.flatten(state, 1))
+        if self.use_action:
+            inputs.append(th.flatten(action, 1))
+        if self.use_next_state:
+            inputs.append(th.flatten(next_state, 1))
+        if self.use_done:
+            inputs.append(th.reshape(done, [-1, 1]))
+
+        return self.mlp(th.cat(inputs, dim=1))
+
+
 class CnnRewardNet(RewardNet):
     """CNN that takes as input the state, action, next state and done flag.
 
