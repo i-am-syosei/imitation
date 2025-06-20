@@ -29,7 +29,10 @@ copyright = "2019-2022, Center for Human-Compatible AI"  # noqa: A001
 author = "Center for Human-Compatible AI"
 
 # The full version, including alpha/beta/rc tags
-version = metadata.version("imitation")
+try:
+    version = metadata.version("imitation")
+except metadata.PackageNotFoundError:  # pragma: no cover - package may not be installed
+    version = "0.0.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -45,9 +48,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
-    "sphinx_github_changelog",
+    # optional extensions; skip if not installed
     "sphinx.ext.doctest",
-    "myst_nb",
 ]
 
 napoleon_google_docstring = True
@@ -93,13 +95,24 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
+# Some optional dependencies are not installed in the documentation build
+# environment. Mock them to prevent import errors during `autosummary`.
+autodoc_mock_imports = [
+    "shimmy",
+]
+
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "furo"
+try:
+    import furo  # type: ignore  # noqa: F401
+
+    html_theme = "furo"
+except Exception:  # pragma: no cover - optional theme may be missing  # noqa: B902
+    html_theme = "alabaster"
 html_title = "imitation"
 html_theme_options = {
     "source_repository": "https://github.com/HumanCompatibleAI/imitation",
@@ -147,9 +160,15 @@ download_url = (
     "download/benchmark_runs.zip"
 )
 
-# Download the benchmark data, extract the summary and place it in the documentation
-with urllib.request.urlopen(download_url) as url:
-    with zipfile.ZipFile(io.BytesIO(url.read())) as z:
-        with z.open("benchmark_runs/summary.md") as f:
-            with open("main-concepts/benchmark_summary.md", "wb") as out:
-                out.write(f.read())
+# Download the benchmark data, extract the summary and place it in the documentation.
+# We skip the download when the environment variable ``SKIP_BENCHMARK_DOWNLOAD`` is
+# set. This avoids network errors during offline builds (e.g. in CI).
+if os.getenv("SKIP_BENCHMARK_DOWNLOAD") is None:
+    try:
+        with urllib.request.urlopen(download_url) as url:
+            with zipfile.ZipFile(io.BytesIO(url.read())) as z:
+                with z.open("benchmark_runs/summary.md") as f:
+                    with open("main-concepts/benchmark_summary.md", "wb") as out:
+                        out.write(f.read())
+    except Exception as exc:  # pragma: no cover - download is optional  # noqa: B902
+        print(f"Skipping benchmark summary download: {exc}")
