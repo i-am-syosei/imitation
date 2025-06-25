@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 
 IS_NOT_WINDOWS = os.name != "nt"
 
-PARALLEL_REQUIRE = ["ray[debug,tune]~=2.0.0"]
+# Updated Ray version constraint to avoid installation failures as
+# version 2.0.0 is no longer available on PyPI.
+PARALLEL_REQUIRE = ["ray[debug,tune]~=2.3"]
 ATARI_REQUIRE = [
     "seals[atari]~=0.2.1",
 ]

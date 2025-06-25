@@ -582,50 +582,79 @@ class AdversarialTrainer(base.DemonstrationAlgorithm[types.Transitions]):
         assert batch_size == len(gen_samples["acts"])
         assert batch_size == len(gen_samples["next_obs"])
 
+        # Preprocess the whole batch once to avoid repeated conversions.
+        (
+            exp_obs_th,
+            exp_acts_th,
+            exp_next_obs_th,
+            exp_dones_th,
+        ) = self.reward_train.preprocess(
+            expert_samples["obs"],
+            expert_samples["acts"],
+            expert_samples["next_obs"],
+            expert_samples["dones"],
+        )
+        (
+            gen_obs_th,
+            gen_acts_th,
+            gen_next_obs_th,
+            gen_dones_th,
+        ) = self.reward_train.preprocess(
+            gen_samples["obs"],
+            gen_samples["acts"],
+            gen_samples["next_obs"],
+            gen_samples["dones"],
+        )
+
+        # Compute generator-policy log probabilities on the entire batch.
+        with th.no_grad():
+            obs_all = np.concatenate([expert_samples["obs"], gen_samples["obs"]])
+            acts_all = np.concatenate([expert_samples["acts"], gen_samples["acts"]])
+            obs_all_th = th.as_tensor(obs_all, device=self.gen_algo.device)
+            acts_all_th = th.as_tensor(acts_all, device=self.gen_algo.device)
+            log_policy_act_prob_all = self._get_log_policy_act_prob(
+                obs_all_th, acts_all_th
+            )
+            if log_policy_act_prob_all is not None:
+                log_policy_act_prob_all = log_policy_act_prob_all.reshape(
+                    (2 * batch_size,)
+                )
+
         for start in range(0, batch_size, self.demo_minibatch_size):
             end = start + self.demo_minibatch_size
-            # take minibatch slice (this creates views so no memory issues)
-            expert_batch = {k: v[start:end] for k, v in expert_samples.items()}
-            gen_batch = {k: v[start:end] for k, v in gen_samples.items()}
 
-            # Concatenate rollouts, and label each row as expert or generator.
-            obs = np.concatenate([expert_batch["obs"], gen_batch["obs"]])
-            acts = np.concatenate([expert_batch["acts"], gen_batch["acts"]])
-            next_obs = np.concatenate([expert_batch["next_obs"], gen_batch["next_obs"]])
-            dones = np.concatenate([expert_batch["dones"], gen_batch["dones"]])
-            # notice that the labels use the convention that expert samples are
-            # labelled with 1 and generator samples with 0.
-            labels_expert_is_one = np.concatenate(
-                [
-                    np.ones(self.demo_minibatch_size, dtype=int),
-                    np.zeros(self.demo_minibatch_size, dtype=int),
-                ],
+            obs_th = th.cat([exp_obs_th[start:end], gen_obs_th[start:end]])
+            acts_th = th.cat([exp_acts_th[start:end], gen_acts_th[start:end]])
+            next_obs_th = th.cat(
+                [exp_next_obs_th[start:end], gen_next_obs_th[start:end]]
+            )
+            dones_th = th.cat([exp_dones_th[start:end], gen_dones_th[start:end]])
+
+            labels_expert_is_one = self._torchify_array(
+                np.concatenate(
+                    [
+                        np.ones(self.demo_minibatch_size, dtype=int),
+                        np.zeros(self.demo_minibatch_size, dtype=int),
+                    ]
+                )
             )
 
-            # Calculate generator-policy log probabilities.
-            with th.no_grad():
-                obs_th = th.as_tensor(obs, device=self.gen_algo.device)
-                acts_th = th.as_tensor(acts, device=self.gen_algo.device)
-                log_policy_act_prob = self._get_log_policy_act_prob(obs_th, acts_th)
-                if log_policy_act_prob is not None:
-                    assert len(log_policy_act_prob) == 2 * self.demo_minibatch_size
-                    log_policy_act_prob = log_policy_act_prob.reshape(
-                        (2 * self.demo_minibatch_size,),
-                    )
-                del obs_th, acts_th  # unneeded
+            if log_policy_act_prob_all is not None:
+                log_policy_act_prob = th.cat(
+                    [
+                        log_policy_act_prob_all[start:end],
+                        log_policy_act_prob_all[batch_size + start : batch_size + end],
+                    ]
+                )
+            else:
+                log_policy_act_prob = None
 
-            obs_th, acts_th, next_obs_th, dones_th = self.reward_train.preprocess(
-                obs,
-                acts,
-                next_obs,
-                dones,
-            )
             batch_dict = {
                 "state": obs_th,
                 "action": acts_th,
                 "next_state": next_obs_th,
                 "done": dones_th,
-                "labels_expert_is_one": self._torchify_array(labels_expert_is_one),
+                "labels_expert_is_one": labels_expert_is_one,
                 "log_policy_act_prob": log_policy_act_prob,
             }
 
