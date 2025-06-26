@@ -20,6 +20,7 @@
 # -- Project information -----------------------------------------------------
 import io
 import os
+import urllib.error
 import urllib.request
 import zipfile
 from importlib import metadata
@@ -29,7 +30,10 @@ copyright = "2019-2022, Center for Human-Compatible AI"  # noqa: A001
 author = "Center for Human-Compatible AI"
 
 # The full version, including alpha/beta/rc tags
-version = metadata.version("imitation")
+try:
+    version = metadata.version("imitation")
+except metadata.PackageNotFoundError:  # pragma: no cover - package not installed
+    version = "0.0.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -45,10 +49,12 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
-    "sphinx_github_changelog",
     "sphinx.ext.doctest",
     "myst_nb",
 ]
+# Avoid GitHub credential prompts during offline builds.
+if os.getenv("SKIP_GITHUB_CHANGELOG") is None:
+    extensions.append("sphinx_github_changelog")
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
@@ -92,6 +98,12 @@ autodoc_default_options = {
     "special-members": "__init__",
     "show-inheritance": True,
 }
+
+# Some optional dependencies are not installed in the documentation build
+# environment. Mock them to prevent import errors during `autosummary`.
+autodoc_mock_imports = [
+    "shimmy",
+]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -147,9 +159,15 @@ download_url = (
     "download/benchmark_runs.zip"
 )
 
-# Download the benchmark data, extract the summary and place it in the documentation
-with urllib.request.urlopen(download_url) as url:
-    with zipfile.ZipFile(io.BytesIO(url.read())) as z:
-        with z.open("benchmark_runs/summary.md") as f:
-            with open("main-concepts/benchmark_summary.md", "wb") as out:
-                out.write(f.read())
+# Download the benchmark data, extract the summary and place it in the documentation.
+# We skip the download when the environment variable ``SKIP_BENCHMARK_DOWNLOAD`` is
+# set. This avoids network errors during offline builds (e.g. in CI).
+if os.getenv("SKIP_BENCHMARK_DOWNLOAD") is None:
+    try:
+        with urllib.request.urlopen(download_url) as url:
+            with zipfile.ZipFile(io.BytesIO(url.read())) as z:
+                with z.open("benchmark_runs/summary.md") as f:
+                    with open("main-concepts/benchmark_summary.md", "wb") as out:
+                        out.write(f.read())
+    except urllib.error.URLError as exc:  # pragma: no cover - download is optional
+        print(f"Skipping benchmark summary download: {exc}")

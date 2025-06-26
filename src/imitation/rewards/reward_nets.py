@@ -175,6 +175,20 @@ class RewardNet(nn.Module, abc.ABC):
         rew_th = self.predict_th(state, action, next_state, done)
         return rew_th.detach().cpu().numpy().flatten()
 
+    def predict_processed_th(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        next_state: np.ndarray,
+        done: np.ndarray,
+        **kwargs,
+    ) -> th.Tensor:
+        """Torch version of :meth:`predict_processed`."""
+        return th.as_tensor(
+            self.predict_processed(state, action, next_state, done, **kwargs),
+            device=self.device,
+        )
+
     def predict_processed(
         self,
         state: np.ndarray,
@@ -659,16 +673,43 @@ class NormalizedRewardNet(PredictProcessedWrapper):
         """
         with networks.evaluating(self):
             # switch to eval mode (affecting normalization, dropout, etc)
-            rew_th = th.tensor(
-                self.base.predict_processed(state, action, next_state, done, **kwargs),
-                device=self.device,
-            )
+            rew_th = self.base.predict_processed_th(
+                state,
+                action,
+                next_state,
+                done,
+                **kwargs,
+            ).to(self.device)
             rew = self.normalize_output_layer(rew_th).detach().cpu().numpy().flatten()
         if update_stats:
             with th.no_grad():
                 self.normalize_output_layer.update_stats(rew_th)
         assert rew.shape == state.shape[:1]
         return rew
+
+    def predict_processed_th(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        next_state: np.ndarray,
+        done: np.ndarray,
+        update_stats: bool = True,
+        **kwargs,
+    ) -> th.Tensor:
+        """Torch version of :meth:`predict_processed`."""
+        with networks.evaluating(self):
+            rew_th = self.base.predict_processed_th(
+                state,
+                action,
+                next_state,
+                done,
+                **kwargs,
+            ).to(self.device)
+            norm_rew = self.normalize_output_layer(rew_th)
+        if update_stats:
+            with th.no_grad():
+                self.normalize_output_layer.update_stats(rew_th)
+        return norm_rew
 
 
 class ShapedRewardNet(ForwardWrapper):
