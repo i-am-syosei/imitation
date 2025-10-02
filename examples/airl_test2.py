@@ -13,8 +13,8 @@ from imitation.rewards.reward_nets import BasicShapedRewardNet
 from imitation.util.networks import RunningNorm
 from imitation.util.util import make_vec_env
 
-SEED = 42␊
-N_ENVS = 8␊
+SEED = 42
+N_ENVS = 8
 env_id = "HalfCheetah-v4"
 
 def main():
