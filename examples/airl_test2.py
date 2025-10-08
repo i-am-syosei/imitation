@@ -28,7 +28,7 @@ def main():
     expert = load_policy(
         "sac-huggingface",
         organization="delta8tyome",
-        env_name="seed0-HalfCheetah-v4",
+        env_name="sac-seed0-HalfCheetah-v4",
         venv=env,
     )
     rollouts = rollout.rollout(
